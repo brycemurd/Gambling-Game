@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Crash - Virtual Coin Multiplier</title>
+  <style>
+    :root {
+      --bg: #090d1a;
+      --panel: #111a31;
+      --panel-2: #0c1427;
+      --text: #e6f0ff;
+      --muted: #8ba1c7;
+      --accent: #34d0ff;
+      --accent-2: #8a5bff;
+      --good: #49f28f;
+      --warn: #ffd166;
+      --bad: #ff5f7b;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+    }
+
+    body.theme-sunset { --accent:#ff8f6b; --accent-2:#ff4fd8; }
+    body.theme-mint { --accent:#56ffca; --accent-2:#41a7ff; }
+
+    * { box-sizing: border-box; }
+    body {
+      margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: var(--text); background: radial-gradient(circle at top, #17264f 0%, var(--bg) 45%);
+      min-height:100vh;
+    }
+
+    .app { max-width: 1200px; margin: 0 auto; padding: 12px; display:grid; gap:12px; }
+    .topbar {
+      display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      background: linear-gradient(145deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.1); border-radius: var(--radius); padding:10px 14px; box-shadow: var(--shadow);
+    }
+    .title { font-weight:800; letter-spacing:.6px; }
+    .title small { color: var(--muted); font-weight:500; margin-left:8px; }
+    .pill { background: var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:6px 12px; }
+
+    .layout { display:grid; grid-template-columns: 2fr 1fr; gap:12px; }
+    .panel {
+      background: linear-gradient(170deg, var(--panel), var(--panel-2)); border:1px solid rgba(255,255,255,.09);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+
+    .game-wrap { padding: 14px; display:grid; gap:10px; }
+    .multiplier {
+      text-align:center; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.25); position:relative; overflow:hidden;
+    }
+    .multiplier .value { font-size: clamp(2rem, 7vw, 5rem); font-weight:900; letter-spacing:1px; text-shadow: 0 0 15px color-mix(in oklab, var(--accent) 70%, white 20%); }
+    .multiplier .state { color: var(--muted); font-size:.95rem; }
+
+    .flash { animation: flash .25s 2; }
+    @keyframes flash { 50% { filter: brightness(2); } }
+    .shake { animation: shake .45s; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-8px); }
+      50% { transform: translateX(8px); }
+      75% { transform: translateX(-6px); }
+    }
+
+    canvas { width:100%; height:230px; display:block; border-radius:10px; background: #070e1f; border:1px solid rgba(255,255,255,.08); }
+
+    .controls { display:grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap:8px; }
+    .controls .group { grid-column: span 2; display:grid; gap:6px; }
+    .controls .group.small { grid-column: span 1; }
+    label { font-size:.82rem; color: var(--muted); }
+    input, select, button {
+      background:#0b1530; color:var(--text); border:1px solid rgba(255,255,255,.15); border-radius:10px;
+      padding:10px; font: inherit;
+    }
+    button { cursor:pointer; font-weight:700; transition: .15s transform, .2s filter, .2s background; }
+    button:hover { filter:brightness(1.1); }
+    button:active { transform: translateY(1px) scale(.99); }
+    .btn-start { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:#041529; }
+    .btn-cash { background: linear-gradient(135deg, var(--good), #90ffa0); color:#042515; }
+    .btn-danger { background: linear-gradient(135deg, #ff6b8a, #ff305e); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+
+    .result { min-height: 24px; font-weight:600; }
+
+    .sidebar { display:grid; gap:10px; }
+    .tabs { display:flex; flex-wrap:wrap; gap:6px; padding:10px; }
+    .tab-btn { flex:1; min-width:92px; }
+    .tab-btn.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .tab-content { padding:0 10px 12px; max-height: 560px; overflow:auto; }
+    .card { background:#0a1328; border:1px solid rgba(255,255,255,.08); border-radius: 10px; padding:10px; margin-bottom:8px; }
+    .card h4 { margin:0 0 6px; }
+    .row { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .tiny { color:var(--muted); font-size:.84rem; }
+
+    .feed { max-height:180px; overflow:auto; display:grid; gap:6px; }
+    .feed div { padding:6px 8px; border-radius:8px; background:#0b1732; font-size:.88rem; border-left:3px solid var(--accent); }
+
+    .popups { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+    .popup {
+      position:absolute; font-weight:900; color:var(--good); text-shadow:0 0 8px rgba(73,242,143,.7);
+      animation: rise 1s ease-out forwards;
+    }
+    @keyframes rise { from{ transform:translateY(0); opacity:1;} to{ transform:translateY(-45px); opacity:0; } }
+
+    .tooltip { cursor:help; border-bottom:1px dotted var(--muted); }
+
+    @media (max-width: 980px){
+      .layout{ grid-template-columns:1fr; }
+      .controls { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .controls .group, .controls .group.small { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar panel">
+      <div class="title">⚡ Neon Crash <small>Virtual coins only · for entertainment</small></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <div class="pill">💰 Balance: <b id="balance">0</b></div>
+        <div class="pill">⭐ Lv <b id="level">1</b> (<span id="xp">0</span> XP)</div>
+        <div class="pill">🔥 Streak: <b id="streak">0</b></div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panel game-wrap" id="gamePanel">
+        <div class="multiplier" id="multWrap">
+          <div class="value" id="multiplier">1.00x</div>
+          <div class="state" id="roundState">Set your bet and start a round.</div>
+        </div>
+
+        <canvas id="graph" width="900" height="260"></canvas>
+
+        <div class="controls">
+          <div class="group">
+            <label>Bet amount</label>
+            <input id="betInput" type="number" min="1" step="1" value="25" />
+          </div>
+          <div class="group">
+            <label>Mode</label>
+            <select id="modeSelect">
+              <option value="normal">Normal — balanced speed/risk</option>
+              <option value="turbo">Turbo — faster rounds, faster crashes</option>
+              <option value="volatile">High Volatility — frequent low crashes, rare huge runs</option>
+            </select>
+          </div>
+          <div class="group small">
+            <label>Auto Cashout</label>
+            <input id="autoInput" type="number" min="1.05" step="0.01" value="2.00" disabled />
+          </div>
+          <div class="group small" style="align-content:end;">
+            <label><input type="checkbox" id="autoToggle" disabled /> Enable</label>
+          </div>
+          <div class="group small" style="align-content:end;">
+            <button class="btn-start" id="startBtn">Start Round</button>
+          </div>
+          <div class="group small" style="align-content:end;">
+            <button class="btn-cash" id="cashBtn" disabled>Cash Out</button>
+          </div>
+        </div>
+
+        <div class="result" id="result"></div>
+        <div class="tiny">Fairness <span class="tooltip" title="This is a virtual-coin game. Crash points are generated randomly with weighted distributions by mode, then revealed after each round.">ⓘ</span> · Last crash point: <b id="lastCrash">—</b></div>
+      </div>
+
+      <div class="panel sidebar">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="shop">Shop</button>
+          <button class="tab-btn" data-tab="stats">Stats</button>
+          <button class="tab-btn" data-tab="ach">Achievements</button>
+          <button class="tab-btn" data-tab="settings">Settings</button>
+        </div>
+        <div class="tab-content" id="tabContent"></div>
+        <div class="card">
+          <h4>Live Feed</h4>
+          <div id="feed" class="feed"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="popups" id="popups"></div>
+
+  <script>
+  (() => {
+    const SAVE_KEY = 'neonCrashSave_v1';
+    const el = id => document.getElementById(id);
+
+    const defaults = {
+      balance: 1000,
+      level: 1,
+      xp: 0,
+      prestige: 0,
+      roundsSinceWheel: 0,
+      stats: { rounds:0, wins:0, losses:0, highestMult:1, biggestPayout:0, longestStreak:0, coinsEarned:0, coinsLost:0, riskyWins:0 },
+      streak: 0,
+      lastCrash: null,
+      upgrades: {
+        autoCashoutUnlock:0, insurance:0, streakBonus:0, incomeBooster:0, luckyCharm:0, betEfficiency:0, xpBoost:0, cosmetic:0
+      },
+      achievements: {},
+      settings: { sound:true, theme:'default' },
+      cosmeticsUnlocked: ['default'],
+      daily: { lastClaim:null, streak:0 },
+      quest: { id:'risk3', progress:0, goal:3, reward:220, done:false },
+      temp: { shield:0, doubleXpRounds:0, eventRounds:0 }
+    };
+
+    const state = Object.assign({}, defaults, loadSave());
+    state.upgrades = Object.assign({}, defaults.upgrades, state.upgrades || {});
+    state.stats = Object.assign({}, defaults.stats, state.stats || {});
+    state.settings = Object.assign({}, defaults.settings, state.settings || {});
+    state.daily = Object.assign({}, defaults.daily, state.daily || {});
+    state.temp = Object.assign({}, defaults.temp, state.temp || {});
+
+    let running = false;
+    let round = null;
+    let rafId = null;
+    let feedTimer = null;
+    let passiveTimer = null;
+
+    const upgradesDef = {
+      autoCashoutUnlock: { name:'Auto Cashout Unlock', base:350, scale:3.5, max:1, desc:'Unlock auto cashout target.' },
+      insurance: { name:'Insurance', base:140, scale:1.9, max:8, desc:'Refund 4% crash loss per level.' },
+      streakBonus: { name:'Streak Bonus', base:180, scale:2.05, max:8, desc:'+1.5% payout per streak level per streak step (capped).' },
+      incomeBooster: { name:'Income Booster', base:120, scale:1.85, max:10, desc:'Passive coins every minute and round-end bonus.' },
+      luckyCharm: { name:'Lucky Charm', base:240, scale:2.2, max:10, desc:'Higher chance of loot drops after wins.' },
+      betEfficiency: { name:'Bet Efficiency', base:170, scale:2.0, max:8, desc:'Reduces 2% house fee by 0.2%/lvl.' },
+      xpBoost: { name:'XP Gain Boost', base:150, scale:1.95, max:10, desc:'Gain 8% more XP per level.' },
+      cosmetic: { name:'Cosmetic Unlocks', base:250, scale:2.4, max:3, desc:'Unlock extra UI themes.' },
+    };
+
+    const achievements = [
+      { id:'cash5', name:'Sky Chaser', cond:s=>s.stats.highestMult>=5, reward:180, text:'Cash out at 5x' },
+      { id:'streak10', name:'Hot Hands', cond:s=>s.stats.longestStreak>=10, reward:300, text:'Reach 10-win streak' },
+      { id:'round100', name:'Veteran', cond:s=>s.stats.rounds>=100, reward:250, text:'Play 100 rounds' },
+      { id:'big1000', name:'Whale Pop', cond:s=>s.stats.biggestPayout>=1000, reward:350, text:'Single payout 1000+' },
+    ];
+
+    const questPool = [
+      { id:'risk3', text:'Win 3 rounds above 2.5x', goal:3, reward:220, track:(m,w)=> w && m>=2.5 },
+      { id:'streak5', text:'Reach 5-win streak', goal:5, reward:260, track:(_,__,s)=> s.streak>=5 },
+      { id:'play12', text:'Play 12 rounds', goal:12, reward:180, track:(_,__,s,before)=> s.stats.rounds-before.stats.rounds>0 },
+    ];
+
+    function loadSave(){
+      try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); } catch { return {}; }
+    }
+    function save(){ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
+    function fmt(n){ return Math.floor(n).toLocaleString(); }
+    function xpNeed(lv){ return Math.floor(80 + lv*lv*18); }
+
+    function addCoins(amount, reason=''){
+      state.balance += amount;
+      if (amount>0) state.stats.coinsEarned += amount;
+      else state.stats.coinsLost += Math.abs(amount);
+      spawnPopup((amount>=0?'+':'') + Math.floor(amount), amount>=0);
+      if (reason) el('result').textContent = reason;
+    }
+
+    function gainXp(base){
+      const mult = 1 + state.upgrades.xpBoost*0.08 + (state.temp.doubleXpRounds>0?1:0);
+      state.xp += Math.floor(base*mult);
+      while (state.xp >= xpNeed(state.level)) {
+        state.xp -= xpNeed(state.level);
+        state.level += 1;
+        addCoins(35 + state.level*6, `Level up! You reached Lv ${state.level}.`);
+      }
+      if (state.temp.doubleXpRounds>0) state.temp.doubleXpRounds--;
+    }
+
+    function upgradeCost(key){
+      const d = upgradesDef[key], lv = state.upgrades[key] || 0;
+      if (lv >= d.max) return null;
+      return Math.floor(d.base * Math.pow(d.scale, lv));
+    }
+
+    function crashPoint(mode){
+      const r = Math.random();
+      if (mode==='turbo') {
+        if (r < .43) return 1 + Math.random()*0.7;
+        if (r < .85) return 1.15 + Math.random()*2.3;
+        if (r < .97) return 3 + Math.random()*6;
+        return 8 + Math.random()*20;
+      }
+      if (mode==='volatile') {
+        if (r < .58) return 1 + Math.random()*0.65;
+        if (r < .9) return 1.1 + Math.random()*1.9;
+        if (r < .98) return 2 + Math.random()*6;
+        return 8 + Math.random()*60;
+      }
+      if (r < .36) return 1 + Math.random()*0.8;
+      if (r < .83) return 1.1 + Math.random()*2.6;
+      if (r < .97) return 3 + Math.random()*6;
+      return 7 + Math.random()*25;
+    }
+
+    function multiplierFromTime(t, mode){
+      const speed = mode==='turbo' ? 1.35 : mode==='volatile' ? 1.05 : 1.15;
+      return 1 + (Math.pow(1.035, t*speed)-1)*0.2 + (t*t)*(0.0016*speed);
+    }
+
+    function drawGraph(points, crashed=false){
+      const c = el('graph'), x = c.getContext('2d');
+      const w = c.width, h = c.height;
+      x.clearRect(0,0,w,h);
+      x.strokeStyle = 'rgba(255,255,255,.12)';
+      x.lineWidth=1;
+      for(let i=1;i<5;i++){ x.beginPath(); x.moveTo(0,(h/5)*i); x.lineTo(w,(h/5)*i); x.stroke(); }
+      if (!points.length) return;
+      const maxM = Math.max(2, ...points.map(p=>p.m));
+      x.beginPath();
+      points.forEach((p, i) => {
+        const px = (p.t / Math.max(points[points.length-1].t, 1))*w;
+        const py = h - ((p.m-1)/(maxM-1))*h;
+        i?x.lineTo(px,py):x.moveTo(px,py);
+      });
+      x.lineWidth = 3;
+      x.strokeStyle = crashed ? '#ff5f7b' : '#37d5ff';
+      x.shadowColor = x.strokeStyle;
+      x.shadowBlur = 10;
+      x.stroke();
+      x.shadowBlur = 0;
+    }
+
+    function startRound(){
+      if (running) return;
+      const betRaw = Number(el('betInput').value);
+      const bet = Math.floor(betRaw);
+      if (!Number.isFinite(bet) || bet < 1) return uiMsg('Enter a valid bet.');
+      if (bet > state.balance) return uiMsg('Not enough balance.');
+
+      const feeRate = Math.max(0, 0.02 - state.upgrades.betEfficiency*0.002);
+      const fee = Math.ceil(bet*feeRate);
+      state.balance -= (bet + fee);
+      state.stats.coinsLost += (bet + fee);
+
+      const mode = el('modeSelect').value;
+      round = {
+        mode, bet, fee,
+        crash: crashPoint(mode),
+        start: performance.now(),
+        points: [{t:0,m:1}],
+        cashed:false,
+        autoTarget: (state.upgrades.autoCashoutUnlock && el('autoToggle').checked) ? Math.max(1.05, Number(el('autoInput').value)||2) : null,
+      };
+      running = true;
+      el('cashBtn').disabled = false;
+      el('startBtn').disabled = true;
+      el('roundState').textContent = `Round running (${mode}). Fee: ${fee}`;
+      loop();
+      save(); render();
+    }
+
+    function cashOut(auto=false){
+      if (!running || !round || round.cashed) return;
+      round.cashed = true;
+      const m = round.currentMult || 1;
+      let payout = round.bet * m;
+      const streakMult = Math.min(0.45, state.streak * state.upgrades.streakBonus * 0.015);
+      payout *= (1 + streakMult);
+      if (state.temp.eventRounds>0) payout *= 1.15;
+      payout *= 1 + state.prestige*0.04;
+      payout = Math.floor(payout);
+
+      addCoins(payout, `${auto?'Auto ':''}Cashed out at ${m.toFixed(2)}x → +${fmt(payout)} coins`);
+      state.stats.wins++;
+      state.streak++;
+      state.stats.longestStreak = Math.max(state.stats.longestStreak, state.streak);
+      state.stats.highestMult = Math.max(state.stats.highestMult, m);
+      state.stats.biggestPayout = Math.max(state.stats.biggestPayout, payout);
+      if (m >= 3) state.stats.riskyWins++;
+      gainXp(18 + Math.floor(m*12));
+      lootDrop();
+      progressQuest(m, true);
+      endRound(false);
+    }
+
+    function crashRound(){
+      const m = round.currentMult || 1;
+      const insured = state.upgrades.insurance * 0.04;
+      let refund = Math.floor(round.bet * insured);
+      if (state.temp.shield > 0) {
+        refund = Math.floor(round.bet * 0.8);
+        state.temp.shield--;
+      }
+      if (refund>0) addCoins(refund, `Crash at ${m.toFixed(2)}x. Insurance refund: +${fmt(refund)}`);
+      else uiMsg(`💥 CRASHED at ${m.toFixed(2)}x. You lost ${fmt(round.bet)}.`);
+      state.stats.losses++;
+      state.streak = 0;
+      gainXp(8);
+      progressQuest(m, false);
+      crashEffects();
+      endRound(true);
+    }
+
+    function endRound(crashed){
+      if (!running) return;
+      running = false;
+      state.stats.rounds++;
+      state.lastCrash = round.crash;
+      state.roundsSinceWheel++;
+      if (state.upgrades.incomeBooster>0) addCoins(2 * state.upgrades.incomeBooster, 'Income booster round bonus.');
+      if (state.temp.eventRounds>0) state.temp.eventRounds--;
+      drawGraph(round.points, crashed);
+      el('lastCrash').textContent = `${round.crash.toFixed(2)}x`;
+      el('cashBtn').disabled = true;
+      el('startBtn').disabled = false;
+      el('roundState').textContent = crashed ? 'Round ended in a crash.' : 'Round complete.';
+      checkAchievements();
+      maybeWheel();
+      autoPrestigeHint();
+      save(); render();
+    }
+
+    function loop(){
+      cancelAnimationFrame(rafId);
+      const tick = () => {
+        if (!running || !round) return;
+        const t = (performance.now() - round.start)/1000;
+        const m = multiplierFromTime(t, round.mode);
+        round.currentMult = m;
+        round.points.push({ t, m });
+        el('multiplier').textContent = `${m.toFixed(2)}x`;
+        drawGraph(round.points, false);
+
+        if (round.autoTarget && m >= round.autoTarget) return cashOut(true);
+        if (m >= round.crash) return crashRound();
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function uiMsg(t){ el('result').textContent = t; }
+
+    function spawnPopup(text, good=true){
+      const p = document.createElement('div');
+      p.className = 'popup';
+      p.style.left = (50 + Math.random()*40) + '%';
+      p.style.top = (70 + Math.random()*12) + '%';
+      p.style.color = good ? 'var(--good)' : 'var(--bad)';
+      p.textContent = text;
+      el('popups').appendChild(p);
+      setTimeout(() => p.remove(), 1000);
+    }
+
+    function crashEffects(){
+      const g = el('gamePanel');
+      g.classList.add('shake');
+      el('multWrap').classList.add('flash');
+      setTimeout(()=>g.classList.remove('shake'), 500);
+      setTimeout(()=>el('multWrap').classList.remove('flash'), 500);
+      beep(120, 0.11, 'sawtooth');
+    }
+
+    function beep(freq=400, dur=0.08, type='sine'){
+      if (!state.settings.sound) return;
+      const C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return;
+      const ctx = new C();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = .04;
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + dur);
+      o.stop(ctx.currentTime + dur);
+    }
+
+    function lootDrop(){
+      const base = 0.06 + state.upgrades.luckyCharm*0.012;
+      if (Math.random() > base) return;
+      const roll = Math.random();
+      if (roll < .45) { addCoins(70, '🎁 Loot: Coin pack +70'); }
+      else if (roll < .75) { state.temp.shield++; uiMsg('🛡️ Loot: Crash shield gained (1 use).'); }
+      else { state.temp.doubleXpRounds += 3; uiMsg('✨ Loot: Double XP for 3 rounds.'); }
+    }
+
+    function maybeWheel(){
+      if (state.roundsSinceWheel < 10) return;
+      state.roundsSinceWheel = 0;
+      const rewards = [80,120,160,220,300,500];
+      const won = rewards[Math.floor(Math.pow(Math.random(), 1.7)*rewards.length)];
+      addCoins(won, `🎡 Spin wheel reward: +${won} coins`);
+      beep(780, .1, 'triangle');
+      if (Math.random()<0.25) state.temp.eventRounds = 5;
+    }
+
+    function checkAchievements(){
+      achievements.forEach(a=>{
+        if (!state.achievements[a.id] && a.cond(state)) {
+          state.achievements[a.id] = true;
+          addCoins(a.reward, `🏆 Achievement unlocked: ${a.name} (+${a.reward})`);
+        }
+      });
+    }
+
+    function progressQuest(mult, win){
+      const q = state.quest;
+      if (!q || q.done) return;
+      const qDef = questPool.find(x=>x.id===q.id);
+      if (!qDef) return;
+      const before = structuredClone(state);
+      if (qDef.track(mult, win, state, before)) q.progress++;
+      if (q.progress >= q.goal) {
+        q.done = true;
+        addCoins(q.reward, `✅ Quest complete: ${qDef.text} (+${q.reward})`);
+      }
+    }
+
+    function rollQuest(){
+      const q = questPool[Math.floor(Math.random()*questPool.length)];
+      state.quest = { id:q.id, progress:0, goal:q.goal, reward:q.reward, done:false };
+    }
+
+    function claimDaily(){
+      const today = new Date().toDateString();
+      if (state.daily.lastClaim === today) return uiMsg('Daily reward already claimed.');
+      const y = new Date(Date.now()-86400000).toDateString();
+      state.daily.streak = (state.daily.lastClaim===y) ? state.daily.streak+1 : 1;
+      state.daily.lastClaim = today;
+      const reward = 90 + Math.min(7, state.daily.streak)*25;
+      addCoins(reward, `Daily reward claimed! Day ${state.daily.streak} (+${reward})`);
+      save(); render();
+    }
+
+    function buyUpgrade(key){
+      const cost = upgradeCost(key);
+      const lv = state.upgrades[key];
+      if (cost===null) return;
+      if (state.balance < cost) return uiMsg('Not enough coins for upgrade.');
+      state.balance -= cost;
+      state.upgrades[key] = lv + 1;
+      if (key === 'autoCashoutUnlock') {
+        el('autoInput').disabled = false;
+        el('autoToggle').disabled = false;
+      }
+      if (key === 'cosmetic') {
+        const unlocks = ['sunset','mint','default'];
+        state.cosmeticsUnlocked.push(unlocks[lv] || 'default');
+      }
+      uiMsg(`Upgraded ${upgradesDef[key].name} to Lv ${lv+1}`);
+      save(); renderTab(activeTab); render();
+    }
+
+    function setTheme(t){
+      document.body.classList.remove('theme-sunset','theme-mint');
+      if (t==='sunset') document.body.classList.add('theme-sunset');
+      if (t==='mint') document.body.classList.add('theme-mint');
+      state.settings.theme = t;
+      save();
+    }
+
+    function autoPrestigeHint(){
+      if (state.level >= 15) {
+        uiMsg('Prestige available in Settings: reset for permanent +4% payout bonus.');
+      }
+    }
+
+    function doPrestige(){
+      if (state.level < 15) return uiMsg('Reach level 15 to prestige.');
+      if (!confirm('Prestige resets coins/upgrades/stats for permanent payout bonus. Continue?')) return;
+      state.prestige++;
+      const preserved = { prestige: state.prestige, settings: state.settings, cosmeticsUnlocked: state.cosmeticsUnlocked, daily: state.daily };
+      Object.assign(state, structuredClone(defaults), preserved);
+      rollQuest();
+      save(); renderTab(activeTab); render();
+    }
+
+    function resetSave(){
+      if (!confirm('Reset all progress?')) return;
+      localStorage.removeItem(SAVE_KEY);
+      location.reload();
+    }
+
+    function render(){
+      el('balance').textContent = fmt(state.balance);
+      el('level').textContent = state.level;
+      el('xp').textContent = `${state.xp}/${xpNeed(state.level)}`;
+      el('streak').textContent = state.streak;
+      if (state.lastCrash) el('lastCrash').textContent = state.lastCrash.toFixed(2) + 'x';
+      el('autoInput').disabled = !state.upgrades.autoCashoutUnlock;
+      el('autoToggle').disabled = !state.upgrades.autoCashoutUnlock;
+      if (state.settings.theme) setTheme(state.settings.theme);
+      save();
+    }
+
+    let activeTab = 'shop';
+    function renderTab(tab){
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+      const box = el('tabContent');
+      if (tab === 'shop') {
+        box.innerHTML = `<div class="card"><h4>Upgrades Shop</h4><div class="tiny">Spend coins for permanent boosts.</div></div>` +
+          Object.keys(upgradesDef).map(k=>{
+            const d = upgradesDef[k], lv = state.upgrades[k], cost = upgradeCost(k);
+            return `<div class="card"><div class="row"><h4>${d.name}</h4><span>Lv ${lv}/${d.max}</span></div><div class="tiny">${d.desc}</div><div class="row" style="margin-top:8px;"><b>${cost===null?'MAXED':fmt(cost)+' coins'}</b><button ${cost===null?'disabled':''} onclick="window.buyUp('${k}')">Buy</button></div></div>`;
+          }).join('');
+      }
+      if (tab === 'stats') {
+        const s = state.stats; const wr = s.rounds? ((s.wins/s.rounds)*100).toFixed(1):'0.0';
+        box.innerHTML = `<div class="card"><h4>Stats</h4>
+          <div class="tiny">Total rounds: <b>${s.rounds}</b></div>
+          <div class="tiny">Wins/Losses: <b>${s.wins}/${s.losses}</b> · Win rate: <b>${wr}%</b></div>
+          <div class="tiny">Highest cashout: <b>${s.highestMult.toFixed(2)}x</b></div>
+          <div class="tiny">Biggest payout: <b>${fmt(s.biggestPayout)}</b></div>
+          <div class="tiny">Longest streak: <b>${s.longestStreak}</b></div>
+          <div class="tiny">Coins earned/lost: <b>${fmt(s.coinsEarned)}</b> / <b>${fmt(s.coinsLost)}</b></div>
+          <div class="tiny">Risky wins (3x+): <b>${s.riskyWins}</b></div>
+        </div>
+        <div class="card"><h4>Quest</h4><div class="tiny">${questPool.find(q=>q.id===state.quest.id)?.text || ''}</div>
+        <div class="tiny">Progress: <b>${state.quest.progress}/${state.quest.goal}</b> · Reward: <b>${fmt(state.quest.reward)}</b></div>
+        <button ${state.quest.done?'':'disabled'} onclick="window.newQuest()">Roll New Quest</button></div>`;
+      }
+      if (tab === 'ach') {
+        box.innerHTML = achievements.map(a=>`<div class="card"><div class="row"><h4>${a.name}</h4><span>${state.achievements[a.id]?'✅':'🔒'}</span></div><div class="tiny">${a.text} · Reward ${a.reward}</div></div>`).join('');
+      }
+      if (tab === 'settings') {
+        const themes = ['default', ...new Set(state.cosmeticsUnlocked)];
+        box.innerHTML = `<div class="card"><h4>Settings</h4>
+          <label><input type="checkbox" id="soundToggle" ${state.settings.sound?'checked':''}/> Sound effects</label>
+          <div class="tiny" style="margin-top:8px;">Theme</div>
+          <select id="themeSelect">${themes.map(t=>`<option ${state.settings.theme===t?'selected':''} value="${t}">${t}</option>`).join('')}</select>
+          <div class="tiny" style="margin-top:8px;">Prestige: <b>${state.prestige}</b> (each gives +4% payouts)</div>
+          <button onclick="window.doPrestige()">Prestige Reset</button>
+          <button class="btn-danger" onclick="window.resetSave()">Reset Save</button>
+          <button onclick="window.claimDaily()">Claim Daily Reward</button>
+        </div>`;
+        setTimeout(() => {
+          const s = el('soundToggle'); if (s) s.onchange = e => { state.settings.sound = e.target.checked; save(); };
+          const t = el('themeSelect'); if (t) t.onchange = e => setTheme(e.target.value);
+        }, 0);
+      }
+    }
+
+    function fakeFeed(){
+      const names = ['Jake','Mia','Nova','Rex','Luna','Kai','Ash','Zed','Ivy','Noah','Ava','Vera'];
+      const lines = [
+        () => `${pick(names)} cashed out at ${(1+Math.random()*4).toFixed(2)}x`,
+        () => `${pick(names)} crashed at ${(1+Math.random()*1.3).toFixed(2)}x`,
+        () => `${pick(names)} hit ${(4+Math.random()*15).toFixed(2)}x!`,
+        () => `${pick(names)} bought Insurance Lv ${1+Math.floor(Math.random()*8)}`,
+      ];
+      const text = pick(lines)();
+      const item = document.createElement('div');
+      item.textContent = text;
+      el('feed').prepend(item);
+      while (el('feed').children.length > 30) el('feed').lastChild.remove();
+    }
+    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+    function startPassiveIncome(){
+      clearInterval(passiveTimer);
+      passiveTimer = setInterval(() => {
+        if (state.upgrades.incomeBooster>0) {
+          const gain = state.upgrades.incomeBooster * 14;
+          addCoins(gain, `Passive income +${gain}`);
+          save(); render();
+        }
+      }, 60000);
+    }
+
+    function bind(){
+      el('startBtn').onclick = startRound;
+      el('cashBtn').onclick = () => cashOut(false);
+      document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => renderTab(b.dataset.tab));
+      window.buyUp = buyUpgrade;
+      window.resetSave = resetSave;
+      window.claimDaily = claimDaily;
+      window.newQuest = () => { if (state.quest.done){ rollQuest(); save(); renderTab('stats'); } };
+      window.doPrestige = doPrestige;
+    }
+
+    function init(){
+      bind();
+      if (!state.quest || !state.quest.id) rollQuest();
+      render(); renderTab('shop'); drawGraph([]);
+      fakeFeed();
+      clearInterval(feedTimer);
+      feedTimer = setInterval(fakeFeed, 1700);
+      startPassiveIncome();
+      uiMsg('Welcome to Neon Crash! Virtual coins only.');
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
